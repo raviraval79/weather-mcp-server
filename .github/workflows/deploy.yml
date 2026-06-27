@@ -55,6 +55,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
+            --no-cache \
             --tag ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }} \
             --tag ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:latest \
             .
