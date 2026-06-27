@@ -30,9 +30,9 @@ register_tools(mcp_server)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("weather-mcp-server starting up")
+    logger.info("weather-mcp-server starting up!")
     yield
-    logger.info("weather-mcp-server shutting down")
+    logger.info("weather-mcp-server shutting down!")
 
 
 app = FastAPI(
