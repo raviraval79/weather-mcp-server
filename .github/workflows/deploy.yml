@@ -5,10 +5,10 @@ on:
     branches: [main]
 
 env:
-  PROJECT_ID: weather-mcp-project
-  REGION: us-central1
-  REGISTRY: us-central1-docker.pkg.dev
-  REPO: mcp-images
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  REGISTRY: ${{ vars.GCP_REGISTRY }}
+  REPO: ${{ vars.GCP_REPO }}
   SERVICE: weather-mcp-server
   IMAGE: weather-mcp-server
 
@@ -74,7 +74,7 @@ jobs:
             --region ${{ env.REGION }} \
             --platform managed \
             --min-instances 0 \
-            --max-instances 3 \
+            --max-instances 2 \
             --memory 512Mi \
             --cpu 1 \
             --port 8080 \
