@@ -1,8 +1,8 @@
 """
 weather-mcp-server
-Uses mcp.run(transport="streamable-http") — the standard way per the official SDK.
-The SDK runs its own uvicorn internally and handles /mcp correctly with no redirects.
-PORT is read from the environment (Cloud Run sets PORT=8080).
+SSE transport — confirmed to work on Cloud Run.
+(Streamable HTTP has a known issue with Cloud Run's networking layer.)
+MCP endpoint: GET /sse
 """
 
 import logging
@@ -13,15 +13,12 @@ from app.openmeteo import get_current_weather, get_forecast, get_historical_weat
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# FastMCP server — stateless_http=True for Cloud Run (no shared session state)
-# json_response=True returns plain JSON instead of SSE (simpler for clients)
-# ---------------------------------------------------------------------------
+port = int(os.environ.get("PORT", 8080))
 
 mcp = FastMCP(
     "weather-mcp-server",
-    stateless_http=True,
-    json_response=True,
+    host="0.0.0.0",
+    port=port,
 )
 
 
@@ -84,14 +81,6 @@ async def get_historical_weather_tool(
     return await get_historical_weather(latitude, longitude, start_date, end_date)
 
 
-# ---------------------------------------------------------------------------
-# Entry point — SDK manages uvicorn internally
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    mcp.run(
-        transport="streamable-http",
-        host="0.0.0.0",
-        port=port,
-    )
+    logger.info(f"Starting weather-mcp-server on port {port} with SSE transport")
+    mcp.run(transport="sse")
