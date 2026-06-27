@@ -4,6 +4,7 @@ Uses the official MCP Python SDK with Streamable HTTP transport.
 """
 
 import logging
+from contextlib import asynccontextmanager
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -82,10 +83,18 @@ async def get_historical_weather_tool(
 
 
 # ---------------------------------------------------------------------------
-# Build ASGI app — mount MCP without trailing slash to avoid 307 redirects
+# Build ASGI app
 # ---------------------------------------------------------------------------
 
 mcp_asgi = mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def lifespan(app):
+    logger.info("weather-mcp-server starting up!")
+    async with mcp.session_manager.run():
+        yield
+    logger.info("weather-mcp-server shutting down!")
 
 
 async def health(request: Request):
@@ -93,9 +102,9 @@ async def health(request: Request):
 
 
 app = Starlette(
+    lifespan=lifespan,
     routes=[
         Route("/health", health),
         Mount("/mcp", app=mcp_asgi),
     ],
-    lifespan=mcp_asgi.lifespan,
 )
