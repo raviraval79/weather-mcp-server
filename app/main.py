@@ -1,26 +1,25 @@
 """
 weather-mcp-server
-Uses FastMCP from the official MCP Python SDK (mcp.server.fastmcp).
-Streamable HTTP transport — stateless, Cloud Run-friendly.
+Uses the official MCP Python SDK with Streamable HTTP transport.
+The MCP app is run directly via mcp.run() in a separate thread,
+while FastAPI serves the /health endpoint.
 """
 
 import logging
-from contextlib import asynccontextmanager
-
+import os
 from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
-
-from app.openmeteo import get_current_weather, get_forecast, get_historical_weather
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from app.openmeteo import get_current_weather, get_forecast, get_historical_weather
+
 # ---------------------------------------------------------------------------
 # FastMCP server
-# stateless_http=True is required for Cloud Run — instances don't share state
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP("weather-mcp-server", stateless_http=True)
+mcp = FastMCP("weather-mcp-server")
 
 
 @mcp.tool()
@@ -52,7 +51,7 @@ async def get_forecast_tool(
         latitude: Latitude of the location
         longitude: Longitude of the location
         days: Number of forecast days (1-16). Defaults to 7.
-        hourly: Include hourly breakdown in addition to daily summary. Defaults to False.
+        hourly: Include hourly breakdown in addition to daily summary.
 
     Returns:
         Daily forecast with temperature, precipitation, wind, sunrise/sunset.
@@ -83,32 +82,19 @@ async def get_historical_weather_tool(
 
 
 # ---------------------------------------------------------------------------
-# Mount FastMCP into FastAPI so /health and /mcp coexist
+# Get the ASGI app from FastMCP and add /health route
 # ---------------------------------------------------------------------------
 
-mcp_app = mcp.http_app(path="/")
+app = mcp.streamable_http_app()
+
+# Add health check route directly on the Starlette app
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("weather-mcp-server starting up!")
-    async with mcp_app.lifespan_context(app):
-        yield
-    logger.info("weather-mcp-server shutting down!")
+async def health(request: Request):
+    return JSONResponse({"status": "ok", "service": "weather-mcp-server"})
 
 
-app = FastAPI(
-    title="Weather MCP Server",
-    description="Open-Meteo MCP server over Streamable HTTP",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-
-@app.get("/health")
-async def health() -> dict:
-    """Health-check endpoint for Cloud Run."""
-    return {"status": "ok", "service": "weather-mcp-server"}
-
-
-app.mount("/mcp", mcp_app)
+app.routes.append(Route("/health", health))
