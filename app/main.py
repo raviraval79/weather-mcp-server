@@ -1,26 +1,28 @@
 """
 weather-mcp-server
-Uses the official MCP Python SDK with Streamable HTTP transport.
+Uses mcp.run(transport="streamable-http") — the standard way per the official SDK.
+The SDK runs its own uvicorn internally and handles /mcp correctly with no redirects.
+PORT is read from the environment (Cloud Run sets PORT=8080).
 """
 
 import logging
-from contextlib import asynccontextmanager
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Mount, Route
+import os
 from mcp.server.fastmcp import FastMCP
-
 from app.openmeteo import get_current_weather, get_forecast, get_historical_weather
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# FastMCP server
+# FastMCP server — stateless_http=True for Cloud Run (no shared session state)
+# json_response=True returns plain JSON instead of SSE (simpler for clients)
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP("weather-mcp-server")
+mcp = FastMCP(
+    "weather-mcp-server",
+    stateless_http=True,
+    json_response=True,
+)
 
 
 @mcp.tool()
@@ -83,28 +85,13 @@ async def get_historical_weather_tool(
 
 
 # ---------------------------------------------------------------------------
-# Build ASGI app
+# Entry point — SDK manages uvicorn internally
 # ---------------------------------------------------------------------------
 
-mcp_asgi = mcp.streamable_http_app()
-
-
-@asynccontextmanager
-async def lifespan(app):
-    logger.info("weather-mcp-server starting up!")
-    async with mcp.session_manager.run():
-        yield
-    logger.info("weather-mcp-server shutting down!")
-
-
-async def health(request: Request):
-    return JSONResponse({"status": "ok", "service": "weather-mcp-server"})
-
-
-app = Starlette(
-    lifespan=lifespan,
-    routes=[
-        Route("/health", health),
-        Mount("/mcp", app=mcp_asgi),
-    ],
-)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    mcp.run(
+        transport="streamable-http",
+        host="0.0.0.0",
+        port=port,
+    )
