@@ -1,19 +1,19 @@
 """
 weather-mcp-server
 Uses the official MCP Python SDK with Streamable HTTP transport.
-The MCP app is run directly via mcp.run() in a separate thread,
-while FastAPI serves the /health endpoint.
 """
 
 import logging
-import os
-from fastapi import FastAPI
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
 from mcp.server.fastmcp import FastMCP
+
+from app.openmeteo import get_current_weather, get_forecast, get_historical_weather
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-from app.openmeteo import get_current_weather, get_forecast, get_historical_weather
 
 # ---------------------------------------------------------------------------
 # FastMCP server
@@ -82,19 +82,20 @@ async def get_historical_weather_tool(
 
 
 # ---------------------------------------------------------------------------
-# Get the ASGI app from FastMCP and add /health route
+# Build ASGI app — mount MCP without trailing slash to avoid 307 redirects
 # ---------------------------------------------------------------------------
 
-app = mcp.streamable_http_app()
-
-# Add health check route directly on the Starlette app
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+mcp_asgi = mcp.streamable_http_app()
 
 
 async def health(request: Request):
     return JSONResponse({"status": "ok", "service": "weather-mcp-server"})
 
 
-app.routes.append(Route("/health", health))
+app = Starlette(
+    routes=[
+        Route("/health", health),
+        Mount("/mcp", app=mcp_asgi),
+    ],
+    lifespan=mcp_asgi.lifespan,
+)
